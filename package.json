@@ -1,0 +1,15 @@
+{
+  "name": "slide-client",
+  "version": "0.0.1",
+  "description": "Client API for Slide.",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/whaatt/SlideClient.git"
+  },
+  "keywords": [
+    "music"
+  ],
+  "author": "Sanjay Kannan",
+  "license": "ISC",
+  "homepage": "https://github.com/whaatt/SlideClient"
+}
