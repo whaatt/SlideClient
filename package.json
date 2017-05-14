@@ -11,5 +11,8 @@
   ],
   "author": "Sanjay Kannan",
   "license": "ISC",
-  "homepage": "https://github.com/whaatt/SlideClient"
+  "homepage": "https://github.com/whaatt/SlideClient",
+  "dependencies": {
+    "deepstream.io-client-js": "^2.1.5"
+  }
 }
