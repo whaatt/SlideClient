@@ -31,10 +31,12 @@ const SUGGESTION_PREFIX = 'suggestion/';
 const EDIT_STREAM_SETTINGS = 'edit-stream-settings';
 const KEEP_STREAM_ALIVE = 'keep-stream-alive';
 const REGISTER_WITH_STREAM = 'register-with-stream';
+const DEREGISTER_FROM_STREAM = 'deregister-from-stream';
 
 // Various intervals.
 const LOGIN_TIMEOUT = 3000;
 const KEEP_ALIVE_INTERVAL = 15000;
+const INACTIVITY_THRESHOLD = 20000;
 
 // Error objects.
 const Errors = {
@@ -44,8 +46,9 @@ const Errors = {
   callbacks: new Error('Could not instantiate client callbacks.'),
   dead: new Error('You are not part of an active stream.'),
   login: new Error('Could not login with supplied credentials.'),
-  permission: new Error('Insufficient permissions to use stream.'),
-  stream: new Error('Reinitialization of the stream failed.')
+  permission: new Error('Insufficient permissions or re-registration.'),
+  stream: new Error('Reinitialization of the stream failed.'),
+  unknown: new Error('An unknown server error occurred.')
 };
 
 // The SlideClient is basically a nice shim over this.
@@ -62,31 +65,69 @@ const Promise = require('bluebird');
  * @param {string} serverURI - The URI of the Deepstream server.
  */
 function SlideClient(serverURI) {
-  this.client = Deepstream(serverURI);
-  this.authenticated = false;
-  this.hostingStream = false;
-  this.joinedStream = null;
-  this.streamPing = null;
-  this.username = null;
+  let clientObject = this;
+  clientObject.client = null;
+  clientObject.serverURI = serverURI;
+  clientObject.authenticated = false;
+  clientObject.hostingStream = false;
+  clientObject.joinedStream = null;
+  clientObject.streamPing = null;
+  clientObject.streamDead = null;
+  clientObject.disconnect = null;
+  clientObject.username = null;
 
-  // Generic connection error handler (private).
-  this.errorHandler = function(error, event, topic) {
-    // For now: just print error.
-    console.log('Error:', error);
-    console.log('Event:', event);
-    console.log('Topic:', topic);
+  // Generic Deepstream error handler (private).
+  clientObject.errorHandler = function(error, event, topic) {
+    // Connection error case.
+    if (event === 'connectionError') {
+      clientObject.client.close();
+
+      // Wait for the closed connection to register.
+      clientObject.client.on('connectionStateChanged', state => {
+        if (state === Deepstream.CONSTANTS.CONNECTION_STATE.CLOSED) {
+          // Reset client properties.
+          clientObject.authenticated = false;
+          clientObject.hostingStream = false;
+          clientObject.joinedStream = null;
+          clientObject.streamPing = null;
+          clientObject.streamDead = null;
+          clientObject.username = null;
+
+          // Reset data callbacks.
+          clientObject.streamDataCB = null;
+          clientObject.lockedCB = null;
+          clientObject.queueCB = null;
+          clientObject.autoplayCB = null;
+          clientObject.suggestionCB = null;
+          clientObject.trackCBS = {};
+
+          // Call disconnect handler.
+          clientObject.disconnect();
+        }
+      });
+      // Handle messages being denied on current stream.
+    } else if (error === Deepstream.CONSTANTS.EVENT.MESSAGE_DENIED &&
+      clientObject.joinedStream !== null && topic === 'R' &&
+      event === STREAM_PREFIX + clientObject.joinedStream) {
+      // Leave the stream (no permissions)
+      // and implicitly fire the dead CB.
+      clientObject.leave((error, data) => true);
+    } else {
+      // Print any unhandled error.
+      console.log('Unhandled Error!');
+      console.log('Error:', error);
+      console.log('Event:', event);
+      console.log('Topic:', topic);
+    }
   };
 
-  // Instantiate error handler.
-  this.client.on('error', this.errorHandler);
-
   // Data callbacks for view.
-  this.streamDataCB = null;
-  this.lockedCB = null;
-  this.queueCB = null;
-  this.autoplayCB = null;
-  this.suggestionCB = null;
-  this.trackCBS = {};
+  clientObject.streamDataCB = null;
+  clientObject.lockedCB = null;
+  clientObject.queueCB = null;
+  clientObject.autoplayCB = null;
+  clientObject.suggestionCB = null;
+  clientObject.trackCBS = {};
 }
 
 /**
@@ -140,21 +181,21 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
   // Wait for record to be ready.
   streamRecord.whenReady((sRecord) => {
     // Get rid of stream data callback.
-    if (this.streamDataCB !== null) {
-      sRecord.unsubscribe(this.streamDataCB);
-      this.streamDataCB = null;
+    if (clientObject.streamDataCB !== null) {
+      sRecord.unsubscribe(clientObject.streamDataCB);
+      clientObject.streamDataCB = null;
       sRecord.discard();
     }
 
     // Install the new one if we can.
     if (dataCallbacks.streamData) {
-      this.streamDataCB = (data) => {
+      clientObject.streamDataCB = (data) => {
         // TODO: More stuff goes here.
         dataCallbacks.streamData(data);
       };
 
       // Re-add the callback and trigger it.
-      sRecord.subscribe(this.streamDataCB, true);
+      sRecord.subscribe(clientObject.streamDataCB, true);
     }
 
     // Queue, locked, and autoplay are only
@@ -164,21 +205,21 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
       const lockedRecord = clientObject.client.record.getList(lockedLocator);
       lockedRecord.whenReady((lRecord) => {
         // Get rid of locked callback.
-        if (this.lockedCB !== null) {
-          lRecord.unsubscribe(this.lockedCB);
-          this.lockedCB = null;
+        if (clientObject.lockedCB !== null) {
+          lRecord.unsubscribe(clientObject.lockedCB);
+          clientObject.lockedCB = null;
           lRecord.discard();
         }
 
         // Install the new one if we can.
         if (dataCallbacks.locked) {
-          this.lockedCB = (data) => {
+          clientObject.lockedCB = (data) => {
             // TODO: More stuff goes here.
             dataCallbacks.locked(data);
           };
 
           // Re-add the callback and trigger it.
-          lRecord.subscribe(this.lockedCB, true);
+          lRecord.subscribe(clientObject.lockedCB, true);
         }
       });
 
@@ -186,21 +227,21 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
       const queueRecord = clientObject.client.record.getList(queueLocator);
       queueRecord.whenReady((qRecord) => {
         // Get rid of queue callback.
-        if (this.queueCB !== null) {
-          qRecord.unsubscribe(this.queueCB);
-          this.queueCB = null;
+        if (clientObject.queueCB !== null) {
+          qRecord.unsubscribe(clientObject.queueCB);
+          clientObject.queueCB = null;
           qRecord.discard();
         }
 
         // Install the new one if we can.
         if (dataCallbacks.queue) {
-          this.queueCB = (data) => {
+          clientObject.queueCB = (data) => {
             // TODO: More stuff goes here.
             dataCallbacks.queue(data);
           };
 
           // Re-add the callback and trigger it.
-          qRecord.subscribe(this.queueCB);
+          qRecord.subscribe(clientObject.queueCB);
         }
       });
 
@@ -209,15 +250,15 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
         .getList(autoplayLocator);
       autoplayRecord.whenReady((aRecord) => {
         // Get rid of autoplay callback.
-        if (this.autoplayCB !== null) {
-          aRecord.unsubscribe(this.autoplayCB);
-          this.autoplayCB = null;
+        if (clientObject.autoplayCB !== null) {
+          aRecord.unsubscribe(clientObject.autoplayCB);
+          clientObject.autoplayCB = null;
           aRecord.discard();
         }
 
         // Install the new one if we can.
         if (dataCallbacks.autoplay) {
-          this.autoplayCB = (data) => {
+          clientObject.autoplayCB = (data) => {
             // TODO: More stuff goes here.
             dataCallbacks.autoplay(data);
           };
@@ -233,21 +274,21 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
       .getList(suggestionLocator);
     suggestionRecord.whenReady((gRecord) => {
       // Get rid of suggestion callback.
-      if (this.suggestionCB !== null) {
-        gRecord.unsubscribe(this.suggestionCB);
-        this.suggestionCB = null;
+      if (clientObject.suggestionCB !== null) {
+        gRecord.unsubscribe(clientObject.suggestionCB);
+        clientObject.suggestionCB = null;
         gRecord.discard();
       }
 
       // Install the new one if we can.
       if (dataCallbacks.suggestion) {
-        this.suggestionCB = (data) => {
+        clientObject.suggestionCB = (data) => {
           // TODO: More stuff goes here.
           dataCallbacks.suggestion(data);
         };
 
         // Re-add the callback and trigger it.
-        gRecord.subscribe(this.suggestionCB);
+        gRecord.subscribe(clientObject.suggestionCB);
       }
     });
 
@@ -263,9 +304,12 @@ SlideClient.prototype.streamCallbacks = function(stream, dataCallbacks,
  *
  * @param {string} username - Username logging in.
  * @param {string} UUID - UUID for the given username.
+ * @param {function} dCallback - Called on disconnect from server.
  * @param {function} callback - Node-style callback for result.
  */
-SlideClient.prototype.login = function(username, UUID, callback) {
+SlideClient.prototype.login = function(username, UUID, dCallback,
+  callback) {
+  if (dCallback === undefined) dCallback = (error, data) => false;
   if (callback === undefined) callback = (error, data) => false;
   let clientObject = this;
   let timeoutTimer;
@@ -281,6 +325,7 @@ SlideClient.prototype.login = function(username, UUID, callback) {
     clearTimeout(timeoutTimer);
     clientObject.client.event.unsubscribe(LOGIN_PREFIX + username, loggedIn);
     clientObject.authenticated = true;
+    clientObject.disconnect = dCallback;
     callback(null, null);
   };
 
@@ -290,6 +335,11 @@ SlideClient.prototype.login = function(username, UUID, callback) {
     callback(Errors.login, null);
   };
 
+  // Instantiate the quarantined connection to Deepstream.
+  clientObject.client = Deepstream(clientObject.serverURI);
+  clientObject.client.on('error', clientObject.errorHandler);
+
+  // Authenticate this connection.
   clientObject.username = username;
   clientObject.client.event.subscribe(LOGIN_PREFIX + username, loggedIn);
   timeoutTimer = setTimeout(loginTimeout, LOGIN_TIMEOUT);
@@ -301,16 +351,16 @@ SlideClient.prototype.login = function(username, UUID, callback) {
  * stream with the passed parameters. User must have
  * called login() first, or this function will fail.
  *
- * @param {string} live - Toggles whether the stream is running.
- * @param {string} privateMode - Sets stream visibility to private.
- * @param {string} voting - Sets voting on or off for the stream.
- * @param {string} autopilot - Sets autopilot on or off for the stream.
- * @param {string} limited - Makes list visibility limited for the stream.
+ * @param {object} settings - Stream settings object (see below for props).
+ * @param {string} settings.live - Toggles whether the stream is running.
+ * @param {string} settings.privateMode - Sets stream visibility to private.
+ * @param {string} settings.voting - Sets voting on or off for the stream.
+ * @param {string} settings.autopilot - Sets autopilot on or off.
+ * @param {string} settings.limited - Makes list visibility limited.
  * @param {map<function>} dataCallbacks - A map from properties to callbacks.
  * @param {function} callback - Node-style callback for result.
  */
-SlideClient.prototype.stream = function(live, privateMode, voting, autopilot,
-  limited, dataCallbacks, callback) {
+SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
   if (callback === undefined) callback = (error, data) => false;
   let clientObject = this;
   // Explicitly enforced to avoid bugs.
@@ -328,11 +378,11 @@ SlideClient.prototype.stream = function(live, privateMode, voting, autopilot,
     const streamCall = {
       username: clientObject.username,
       stream: clientObject.username,
-      live: live,
-      private: privateMode,
-      voting: voting,
-      autopilot: autopilot,
-      limited: limited
+      live: settings.live || true,
+      private: settings.privateMode || false,
+      voting: settings.voting || false,
+      autopilot: settings.autopilot || false,
+      limited: settings.limited || false
     };
 
     // Make the RPC call to [re]initialize a stream and create CBS.
@@ -341,12 +391,12 @@ SlideClient.prototype.stream = function(live, privateMode, voting, autopilot,
       if (error) callback(Errors.stream, null);
       else {
         // Start stream keep-alive ping.
-        if (!clientObject.hostingStream && live === true) {
+        if (!clientObject.hostingStream && settings.live === true) {
           clientObject.hostingStream = true;
           clientObject.streamPing = setInterval(() =>
             clientObject.client.rpc.make(KEEP_STREAM_ALIVE, keepAliveCall,
-              (error, data) => true /* TODO: What goes here? */)
-          , KEEP_ALIVE_INTERVAL);
+              (error, data) => true /* TODO: What goes here? */),
+          KEEP_ALIVE_INTERVAL);
         }
 
         // Disable streaming.
@@ -371,10 +421,13 @@ SlideClient.prototype.stream = function(live, privateMode, voting, autopilot,
  *
  * @param {string} stream - The stream you are trying to join.
  * @param {map<function>} dataCallbacks - A map from properties to callbacks.
+ * @param {function} deadCallback - Called when the stream goes dead somehow.
  * @param {function} callback - Node-style callback for result.
  */
-SlideClient.prototype.join = function(stream, dataCallbacks, callback) {
+SlideClient.prototype.join = function(stream, dataCallbacks, deadCallback,
+  callback) {
   if (callback === undefined) callback = (error, data) => false;
+  if (deadCallback === undefined) deadCallback = (error, data) => false;
   const clientObject = this;
   // Explicitly enforced to avoid bugs.
   if (!clientObject.authenticated)
@@ -394,7 +447,24 @@ SlideClient.prototype.join = function(stream, dataCallbacks, callback) {
       (error, data) => {
       if (error) callback(Errors.permission, null);
       else {
-        this.joinedStream = stream;
+        clientObject.joinedStream = stream;
+        // Called on disconnect or loss of permissions.
+        clientObject.streamDead = deadCallback;
+
+        // Joiner ping is to check activity status.
+        clientObject.streamPing = setInterval(() => {
+          let locator = STREAM_PREFIX + stream;
+          let streamData = clientObject.client.record.getRecord(locator);
+          streamData.whenReady((sRecord) => {
+            const now = (new Date).getTime();
+            // If the stream has been inactive for long enough of a
+            // time, call leave on the stream and fire the dead CB.
+            if (now - sRecord.get('timestamp') > INACTIVITY_THRESHOLD)
+              clientObject.leave((error, data) => true);
+          });
+        }, KEEP_ALIVE_INTERVAL);
+
+        // Register any callbacks passed to join using streamCallbacks().
         clientObject.streamCallbacks(null, dataCallbacks, (error, data) => {
           if (error) callback(Errors.callbacks, null);
           else callback(null, null);
@@ -404,6 +474,41 @@ SlideClient.prototype.join = function(stream, dataCallbacks, callback) {
   }
 }
 
+/**
+ * Leaves a stream and uninstantiates relevant data callbacks.
+ *
+ * @param {function} callback - Node-style callback for result.
+ */
+SlideClient.prototype.leave = function(callback) {
+  if (callback === undefined) callback = (error, data) => false;
+  const clientObject = this;
+  // You can only leave a stream if you belong to one.
+  if (clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  else {
+    const deregisterCall = {
+      username: clientObject.username,
+      stream: clientObject.joinedStream
+    };
+
+    // Remove callbacks and then deregister. TODO: Keep an eye
+    // on this function, and see if the potential race happens.
+    clientObject.streamCallbacks(null, {}, (error, data) => {
+      clearInterval(clientObject.streamPing); // Stop the ping.
+      clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
+        (error, data) => {
+        if (error) callback(Errors.unknown, null);
+        else {
+          clientObject.streamDead();
+          clientObject.joinedStream = null;
+          clientObject.streamDead = null;
+          callback(null, null);
+        }
+      });
+    });
+  }
+};
+
 // Export the class (in both NodeBack and Promises).
 Promise.promisifyAll(SlideClient.prototype);
-module.exports = SlideClient
+module.exports = SlideClient;
