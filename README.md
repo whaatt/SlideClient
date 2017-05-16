@@ -8,8 +8,8 @@ This library is meant to abstract some of the ugliness
 involved in maintaining state with the socket server. Please
 see the `docs` directory for full API documentation in HTML
 format. If you prefer to use the Promises style instead of
-Node callbacks, simply omit the callback parameter in any
-function, and replace the corresponding `functionName`
+typical Node callbacks, simply omit the callback parameter
+in any function, and replace the corresponding `functionName`
 with `functionNameAsync` in your code.
 
 ### Setup ###
