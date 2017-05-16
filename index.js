@@ -412,7 +412,7 @@ SlideClient.prototype.logout = function(callback) {
  * stream with the passed parameters. User must have
  * called login() first, or this function will fail.
  *
- * @param {object} settings - Stream settings object (see below for props).
+ * @param {Object} settings - Stream settings object (see below for props).
  * @param {string} settings.live - Toggles whether the stream is running.
  * @param {string} settings.privateMode - Sets stream visibility to private.
  * @param {string} settings.voting - Sets voting on or off for the stream.
@@ -497,7 +497,7 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
  * @param {Function} dataCallbacks.queue - A callback for queue list data.
  * @param {Function} dataCallbacks.autoplay - A callback for autoplay list data.
  * @param {Function} dataCallbacks.suggestion - A callback for suggestion list data.
- * @param {function} deadCallback - Called when the stream goes dead somehow.
+ * @param {Function} deadCallback - Called when the stream goes dead somehow.
  * @param {requestCallback} callback - Node-style callback for result.
  */
 SlideClient.prototype.join = function(stream, dataCallbacks, deadCallback,
