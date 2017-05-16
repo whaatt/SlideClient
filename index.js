@@ -592,6 +592,7 @@ SlideClient.prototype.leave = function(callback) {
  * @param {string} URI - Spotify URI for the track.
  * @param {Object} trackData - Spotify track data for the track.
  * @param {requestCallback} callback - Node-style callback for result.
+ * @returns {string} A newly-created track locator.
  */
 SlideClient.prototype.createTrack = function(URI, trackData, callback) {
   if (callback === undefined) callback = (error, data) => null;
