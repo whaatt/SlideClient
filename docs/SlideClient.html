@@ -24,7 +24,7 @@
 <label for="nav-trigger" class="overlay"></label>
 
 <nav>
-    <li class="nav-link nav-home-link"><a href="index.html">Home</a></li><li class="nav-heading">Classes</li><li class="nav-heading"><span class="nav-item-type type-class">C</span><span class="nav-item-name"><a href="SlideClient.html">SlideClient</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#getState">getState</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#join">join</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#leave">leave</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#login">login</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#logout">logout</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#setStreamCallbacks">setStreamCallbacks</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#stream">stream</a></span></li><li class="nav-heading"><a href="global.html">Globals</a></li>
+    <li class="nav-link nav-home-link"><a href="index.html">Home</a></li><li class="nav-heading">Classes</li><li class="nav-heading"><span class="nav-item-type type-class">C</span><span class="nav-item-name"><a href="SlideClient.html">SlideClient</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#createTrack">createTrack</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#getState">getState</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#join">join</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#leave">leave</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#login">login</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#logout">logout</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#setStreamCallbacks">setStreamCallbacks</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#stream">stream</a></span></li><li class="nav-heading"><a href="global.html">Globals</a></li>
 </nav>
 
 <div id="main">
@@ -56,7 +56,7 @@
 
     
 
-    <h4 class="name" id="SlideClient"><span class="type-signature"></span>new SlideClient<span class="signature">(serverURI)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="SlideClient"><span class="type-signature"></span>new SlideClient<span class="signature">(serverURI, disconnectCB)</span><span class="type-signature"></span></h4>
 
     
 
@@ -100,7 +100,7 @@ server URI, and instantiates SlideClient.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line75">line 75</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line77">line 77</a>
     </li></ul></dd>
     
 
@@ -167,6 +167,32 @@ server URI, and instantiates SlideClient.
         </tr>
 
     
+
+        <tr>
+            
+                <td class="name"><code>disconnectCB</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><code>function</code></span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">
+                Called on disconnect from server.
+                
+            </td>
+        </tr>
+
+    
     </tbody>
 </table>
 
@@ -204,6 +230,194 @@ server URI, and instantiates SlideClient.
     
         <h3 class="subsection-title">Methods</h3>
 
+        
+            
+<div class="section-method">
+
+    
+
+    <h4 class="name" id="createTrack"><span class="type-signature"></span>createTrack<span class="signature">(URI, trackData, callback)</span><span class="type-signature"></span></h4>
+
+    
+
+
+
+<div class="description">
+    Creates a track on the server and returns the record locator
+for the given track.
+</div>
+
+
+
+
+
+<dl class="details">
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+
+    
+    <dt class="tag-source">Source:</dt>
+    <dd class="tag-source"><ul class="dummy"><li>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line596">line 596</a>
+    </li></ul></dd>
+    
+
+    
+
+    
+
+    
+</dl>
+
+
+
+
+
+
+
+
+
+    <h5>Parameters:</h5>
+    
+
+<table class="params">
+    <thead>
+    <tr>
+        
+        <th>Name</th>
+        
+
+        <th>Type</th>
+
+        
+
+        
+
+        <th class="last">Description</th>
+    </tr>
+    </thead>
+
+    <tbody>
+    
+
+        <tr>
+            
+                <td class="name"><code>URI</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><code>string</code></span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">
+                Spotify URI for the track.
+                
+            </td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>trackData</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><code>Object</code></span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">
+                Spotify track data for the track.
+                
+            </td>
+        </tr>
+
+    
+
+        <tr>
+            
+                <td class="name"><code>callback</code></td>
+            
+
+            <td class="type">
+            
+                
+<span class="param-type"><code><a href="global.html#requestCallback">requestCallback</a></code></span>
+
+
+            
+            </td>
+
+            
+
+            
+
+            <td class="description last">
+                Node-style callback for result.
+                
+            </td>
+        </tr>
+
+    
+    </tbody>
+</table>
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+</div>
         
             
 <div class="section-method">
@@ -253,7 +467,7 @@ server URI, and instantiates SlideClient.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line153">line 153</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line155">line 155</a>
     </li></ul></dd>
     
 
@@ -370,7 +584,7 @@ server URI, and instantiates SlideClient.
 
     
 
-    <h4 class="name" id="join"><span class="type-signature"></span>join<span class="signature">(stream, dataCallbacks, deadCallback, callback)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="join"><span class="type-signature"></span>join<span class="signature">(stream, dataCallbacks, streamDeadCB, callback)</span><span class="type-signature"></span></h4>
 
     
 
@@ -413,7 +627,7 @@ server URI, and instantiates SlideClient.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line503">line 503</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line501">line 501</a>
     </li></ul></dd>
     
 
@@ -664,7 +878,7 @@ server URI, and instantiates SlideClient.
 
         <tr>
             
-                <td class="name"><code>deadCallback</code></td>
+                <td class="name"><code>streamDeadCB</code></td>
             
 
             <td class="type">
@@ -781,7 +995,7 @@ server URI, and instantiates SlideClient.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line559">line 559</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line557">line 557</a>
     </li></ul></dd>
     
 
@@ -873,7 +1087,7 @@ server URI, and instantiates SlideClient.
 
     
 
-    <h4 class="name" id="login"><span class="type-signature"></span>login<span class="signature">(username, UUID, disconnectCB, callback)</span><span class="type-signature"></span></h4>
+    <h4 class="name" id="login"><span class="type-signature"></span>login<span class="signature">(username, UUID, callback)</span><span class="type-signature"></span></h4>
 
     
 
@@ -918,7 +1132,7 @@ event listener on the login event.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line336">line 336</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line337">line 337</a>
     </li></ul></dd>
     
 
@@ -1006,32 +1220,6 @@ event listener on the login event.
 
             <td class="description last">
                 UUID for the given username.
-                
-            </td>
-        </tr>
-
-    
-
-        <tr>
-            
-                <td class="name"><code>disconnectCB</code></td>
-            
-
-            <td class="type">
-            
-                
-<span class="param-type"><code>function</code></span>
-
-
-            
-            </td>
-
-            
-
-            
-
-            <td class="description last">
-                Called on disconnect from server.
                 
             </td>
         </tr>
@@ -1132,7 +1320,7 @@ clean-up that is necessary on joined/hosted streams.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line381">line 381</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line379">line 379</a>
     </li></ul></dd>
     
 
@@ -1267,7 +1455,7 @@ clean-up that is necessary on joined/hosted streams.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line180">line 180</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line182">line 182</a>
     </li></ul></dd>
     
 
@@ -1611,7 +1799,7 @@ called login() first, or this function will fail.
     
     <dt class="tag-source">Source:</dt>
     <dd class="tag-source"><ul class="dummy"><li>
-        <a href="index.js.html">index.js</a>, <a href="index.js.html#line429">line 429</a>
+        <a href="index.js.html">index.js</a>, <a href="index.js.html#line427">line 427</a>
     </li></ul></dd>
     
 
@@ -2077,7 +2265,7 @@ called login() first, or this function will fail.
 <br class="clear">
 
 <footer>
-    Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.4.3</a> on Tue May 16 2017 14:35:06 GMT-0700 (Pacific Sommerzeit) using the Minami theme.
+    Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.4.3</a> on Tue May 16 2017 15:39:43 GMT-0700 (Pacific Sommerzeit) using the Minami theme.
 </footer>
 
 <script>prettyPrint();</script>
