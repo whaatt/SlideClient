@@ -32,6 +32,7 @@ const EDIT_STREAM_SETTINGS = 'edit-stream-settings';
 const KEEP_STREAM_ALIVE = 'keep-stream-alive';
 const REGISTER_WITH_STREAM = 'register-with-stream';
 const DEREGISTER_FROM_STREAM = 'deregister-from-stream';
+const CREATE_LIST_TRACK = 'create-list-track';
 
 // Various intervals.
 const LOGIN_TIMEOUT = 3000;
@@ -45,7 +46,7 @@ const Errors = {
   busy: new Error('You cannot stream and join a stream at the same time.'),
   callbacks: new Error('Could not instantiate client callbacks.'),
   dead: new Error('You are not part of an active stream.'),
-  login: new Error('Could not login with supplied credentials.'),
+  login: new Error('Could not either establish connection or login.'),
   permission: new Error('Insufficient permissions or re-registration.'),
   stream: new Error('Reinitialization of the stream failed.'),
   unknown: new Error('An unknown server error occurred.')
@@ -71,8 +72,9 @@ const Promise = require('bluebird');
  *
  * @constructor
  * @param {string} serverURI - The URI of the Deepstream server.
+ * @param {Function} disconnectCB - Called on disconnect from server.
  */
-function SlideClient(serverURI) {
+function SlideClient(serverURI, disconnectCB) {
   let clientObject = this;
   clientObject.client = null;
   clientObject.serverURI = serverURI;
@@ -81,7 +83,7 @@ function SlideClient(serverURI) {
   clientObject.joinedStream = null;
   clientObject.streamPing = null;
   clientObject.streamDeadCB = null;
-  clientObject.disconnectCB = null;
+  clientObject.disconnectCB = disconnectCB;
   clientObject.username = null;
 
   // Closes connection and resets client.
@@ -330,18 +332,15 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
  *
  * @param {string} username - Username logging in.
  * @param {string} UUID - UUID for the given username.
- * @param {Function} disconnectCB - Called on disconnect from server.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.login = function(username, UUID, disconnectCB,
-  callback) {
-  if (disconnectCB === undefined) disconnectCB = (error, data) => false;
+SlideClient.prototype.login = function(username, UUID, callback) {
   if (callback === undefined) callback = (error, data) => null;
   let clientObject = this;
   let timeoutTimer;
 
   // Cannot log in if already logged in.
-  if (clientObject.authenticated) {
+  if (clientObject.authenticated === true) {
     callback(Errors.already, null);
     return;
   }
@@ -351,7 +350,6 @@ SlideClient.prototype.login = function(username, UUID, disconnectCB,
     clearTimeout(timeoutTimer);
     clientObject.client.event.unsubscribe(LOGIN_PREFIX + username, loggedIn);
     clientObject.authenticated = true;
-    clientObject.disconnectCB = disconnectCB;
     callback(null, null);
   };
 
@@ -430,7 +428,7 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
   if (callback === undefined) callback = (error, data) => null;
   let clientObject = this;
   // Explicitly enforced to avoid bugs.
-  if (!clientObject.authenticated)
+  if (clientObject.authenticated === false)
     callback(Errors.auth, null);
   // Cannot host a stream AND be part of one.
   else if (clientObject.joinedStream !== null)
@@ -497,19 +495,19 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
  * @param {Function} dataCallbacks.queue - A callback for queue list data.
  * @param {Function} dataCallbacks.autoplay - A callback for autoplay list data.
  * @param {Function} dataCallbacks.suggestion - A callback for suggestion list data.
- * @param {Function} deadCallback - Called when the stream goes dead somehow.
+ * @param {Function} streamDeadCB - Called when the stream goes dead somehow.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.join = function(stream, dataCallbacks, deadCallback,
+SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
   callback) {
   if (callback === undefined) callback = (error, data) => null;
-  if (deadCallback === undefined) deadCallback = (error, data) => false;
+  if (streamDeadCB === undefined) streamDeadCB = (error, data) => false;
   const clientObject = this;
   // Explicitly enforced to avoid bugs.
-  if (!clientObject.authenticated)
+  if (clientObject.authenticated === false)
     callback(Errors.auth, null);
   // Cannot host and join at same time.
-  else if (clientObject.hostingStream)
+  else if (clientObject.hostingStream === true)
     callback(Errors.busy, null);
   else {
     const registerCall = {
@@ -525,7 +523,7 @@ SlideClient.prototype.join = function(stream, dataCallbacks, deadCallback,
       else {
         clientObject.joinedStream = stream;
         // Called on disconnect or loss of permissions.
-        clientObject.streamDeadCB = deadCallback;
+        clientObject.streamDeadCB = streamDeadCB;
 
         // Joiner ping is to check activity status.
         clientObject.streamPing = setInterval(() => {
@@ -586,7 +584,43 @@ SlideClient.prototype.leave = function(callback) {
   }
 };
 
-// SlideClient.prototype.createTrack = function(callback)
+
+/**
+ * Creates a track on the server and returns the record locator
+ * for the given track.
+ *
+ * @param {string} URI - Spotify URI for the track.
+ * @param {Object} trackData - Spotify track data for the track.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.createTrack = function(URI, trackData, callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot stream if not part of a stream.
+  else if (clientObject.hostingStream === false &&
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Should we explicitly make
+  // sure that permissions are fine?
+  else {
+    const trackCall = {
+      username: clientObject.username,
+      URI: URI, playData: trackData,
+      stream: clientObject.hostingStream === true
+        ? clientObject.username : clientObject.joinedStream
+    };
+
+    // The RPC call will return the newly-created locator.
+    clientObject.client.rpc.make(CREATE_LIST_TRACK, trackCall,
+      (error, data) => {
+      if (error) callback(Errors.permission, null);
+      else callback(null, data);
+    });
+  }
+};
 
 // Export the class (in both NodeBack and Promises).
 Promise.promisifyAll(SlideClient.prototype);
