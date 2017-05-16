@@ -6,6 +6,10 @@
     "type": "git",
     "url": "git+https://github.com/whaatt/SlideClient.git"
   },
+  "scripts": {
+    "docScript": "node_modules/.bin/jsdoc --configure JSDoc.json --verbose",
+    "documentation": "npm run docScript index.js --readme README.md"
+  },
   "keywords": [
     "music"
   ],
@@ -15,5 +19,9 @@
   "dependencies": {
     "bluebird": "^3.5.0",
     "deepstream.io-client-js": "^2.1.5"
+  },
+  "devDependencies": {
+    "jsdoc": "^3.4.3",
+    "minami": "^1.2.3"
   }
 }
