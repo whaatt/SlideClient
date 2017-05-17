@@ -326,6 +326,50 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
 };
 
 /**
+ * Sets view callbacks on stream track data.
+ *
+ * @param {Object} trackCBS - A map from track locators to callbacks.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.setTrackCallbacks = function(trackCBS, callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot set track callback if not part of a stream.
+  else if (clientObject.hostingStream === false &&
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Explicitly warn the user if they
+  // are about to set invalid callbacks that
+  // never actually get set due to MESSAGE_DENIED.
+  else {
+    // Unsubscribe from tracks in the current
+    // list of callbacks but not in the new one.
+    for (let locator in clientObject.trackCBS) {
+      if (locator in trackCBS) continue;
+      const track = clientObject.client.record.getRecord(locator);
+      track.whenReady((tRecord) =>
+        tRecord.unsubscribe(clientObject.trackCBS[locator]));
+    }
+
+    // Subscribe to the tracks not in the current
+    // list of callbacks but in the new one.
+    for (let locator in trackCBS) {
+      if (locator in clientObject.trackCBS) continue;
+      const track = clientObject.client.record.getRecord(locator);
+      track.whenReady((tRecord) =>
+        tRecord.subscribe(trackCBS[locator], true));
+    }
+
+    // Assign the new list of callbacks.
+    clientObject.trackCBS = trackCBS;
+    callback(null, null);
+  }
+};
+
+/**
  * Logs the user in. This involves sending the login
  * event, and then waiting for confirmation from an
  * event listener on the login event.
@@ -569,21 +613,22 @@ SlideClient.prototype.leave = function(callback) {
     // Remove callbacks and then deregister. TODO: Keep an eye
     // on this function, and see if the potential race happens.
     clientObject.setStreamCallbacks(null, {}, (error, data) => {
-      clearInterval(clientObject.streamPing); // Stop the ping.
-      clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
-        (error, data) => {
-        if (error) callback(Errors.unknown, null);
-        else {
-          clientObject.streamDeadCB();
-          clientObject.joinedStream = null;
-          clientObject.streamDeadCB = null;
-          callback(null, null);
-        }
+      clientObject.setTrackCallbacks({}, (error, data) => {
+        clearInterval(clientObject.streamPing); // Stop the ping.
+        clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
+          (error, data) => {
+          if (error) callback(Errors.unknown, null);
+          else {
+            clientObject.streamDeadCB();
+            clientObject.joinedStream = null;
+            clientObject.streamDeadCB = null;
+            callback(null, null);
+          }
+        });
       });
     });
   }
 };
-
 
 /**
  * Creates a track on the server and returns the record locator

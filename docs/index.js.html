@@ -24,7 +24,7 @@
 <label for="nav-trigger" class="overlay"></label>
 
 <nav>
-    <li class="nav-link nav-home-link"><a href="index.html">Home</a></li><li class="nav-heading">Classes</li><li class="nav-heading"><span class="nav-item-type type-class">C</span><span class="nav-item-name"><a href="SlideClient.html">SlideClient</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#createTrack">createTrack</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#getState">getState</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#join">join</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#leave">leave</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#login">login</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#logout">logout</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#setStreamCallbacks">setStreamCallbacks</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#stream">stream</a></span></li><li class="nav-heading"><a href="global.html">Globals</a></li>
+    <li class="nav-link nav-home-link"><a href="index.html">Home</a></li><li class="nav-heading">Classes</li><li class="nav-heading"><span class="nav-item-type type-class">C</span><span class="nav-item-name"><a href="SlideClient.html">SlideClient</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#createTrack">createTrack</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#getState">getState</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#join">join</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#leave">leave</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#login">login</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#logout">logout</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#setStreamCallbacks">setStreamCallbacks</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#setTrackCallbacks">setTrackCallbacks</a></span></li><li class="nav-item"><span class="nav-item-type type-function">F</span><span class="nav-item-name"><a href="SlideClient.html#stream">stream</a></span></li><li class="nav-heading"><a href="global.html">Globals</a></li>
 </nav>
 
 <div id="main">
@@ -367,6 +367,50 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
 };
 
 /**
+ * Sets view callbacks on stream track data.
+ *
+ * @param {Object} trackCBS - A map from track locators to callbacks.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.setTrackCallbacks = function(trackCBS, callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot set track callback if not part of a stream.
+  else if (clientObject.hostingStream === false &amp;&amp;
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Explicitly warn the user if they
+  // are about to set invalid callbacks that
+  // never actually get set due to MESSAGE_DENIED.
+  else {
+    // Unsubscribe from tracks in the current
+    // list of callbacks but not in the new one.
+    for (let locator in clientObject.trackCBS) {
+      if (locator in trackCBS) continue;
+      const track = clientObject.client.record.getRecord(locator);
+      track.whenReady((tRecord) =>
+        tRecord.unsubscribe(clientObject.trackCBS[locator]));
+    }
+
+    // Subscribe to the tracks not in the current
+    // list of callbacks but in the new one.
+    for (let locator in trackCBS) {
+      if (locator in clientObject.trackCBS) continue;
+      const track = clientObject.client.record.getRecord(locator);
+      track.whenReady((tRecord) =>
+        tRecord.subscribe(trackCBS[locator], true));
+    }
+
+    // Assign the new list of callbacks.
+    clientObject.trackCBS = trackCBS;
+    callback(null, null);
+  }
+};
+
+/**
  * Logs the user in. This involves sending the login
  * event, and then waiting for confirmation from an
  * event listener on the login event.
@@ -610,21 +654,22 @@ SlideClient.prototype.leave = function(callback) {
     // Remove callbacks and then deregister. TODO: Keep an eye
     // on this function, and see if the potential race happens.
     clientObject.setStreamCallbacks(null, {}, (error, data) => {
-      clearInterval(clientObject.streamPing); // Stop the ping.
-      clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
-        (error, data) => {
-        if (error) callback(Errors.unknown, null);
-        else {
-          clientObject.streamDeadCB();
-          clientObject.joinedStream = null;
-          clientObject.streamDeadCB = null;
-          callback(null, null);
-        }
+      clientObject.setTrackCallbacks({}, (error, data) => {
+        clearInterval(clientObject.streamPing); // Stop the ping.
+        clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
+          (error, data) => {
+          if (error) callback(Errors.unknown, null);
+          else {
+            clientObject.streamDeadCB();
+            clientObject.joinedStream = null;
+            clientObject.streamDeadCB = null;
+            callback(null, null);
+          }
+        });
       });
     });
   }
 };
-
 
 /**
  * Creates a track on the server and returns the record locator
@@ -679,7 +724,7 @@ module.exports = SlideClient;
 <br class="clear">
 
 <footer>
-    Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.4.3</a> on Tue May 16 2017 15:43:13 GMT-0700 (Pacific Sommerzeit) using the Minami theme.
+    Generated by <a href="https://github.com/jsdoc3/jsdoc">JSDoc 3.4.3</a> on Wed May 17 2017 03:17:44 GMT-0700 (Pacific Sommerzeit) using the Minami theme.
 </footer>
 
 <script>prettyPrint();</script>
