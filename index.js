@@ -3,11 +3,13 @@
  * Type: Module Index
  * Exports the SlideClient.
  *
- * Note: There is NO validation of
+ * Note: There is little validation of
  * function parameters in the client
  * API. Passing invalid parameters or
  * not passing parameters will result
- * in UNDEFINED behavior.
+ * in UNDEFINED behavior. To avoid
+ * debugging headaches, however, a
+ * few common mistakes are checked.
  *
  * Additional Note: A Promise-based
  * interface is available by leaving
@@ -33,6 +35,9 @@ const KEEP_STREAM_ALIVE = 'keep-stream-alive';
 const REGISTER_WITH_STREAM = 'register-with-stream';
 const DEREGISTER_FROM_STREAM = 'deregister-from-stream';
 const CREATE_LIST_TRACK = 'create-list-track';
+const MODIFY_STREAM_LISTS = 'modify-stream-lists';
+const VOTE_ON_TRACK = 'vote-on-track';
+const PLAY_TRACK = 'play-track';
 
 // Various intervals.
 const LOGIN_TIMEOUT = 3000;
@@ -47,8 +52,7 @@ const Errors = {
   callbacks: new Error('Could not instantiate client callbacks.'),
   dead: new Error('You are not part of an active stream.'),
   login: new Error('Could not either establish connection or login.'),
-  permission: new Error('Insufficient permissions or re-registration.'),
-  stream: new Error('Reinitialization of the stream failed.'),
+  server: new Error('A remote error occurred.'),
   unknown: new Error('An unknown server error occurred.')
 };
 
@@ -269,7 +273,7 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
           };
 
           // Re-add the callback and trigger it.
-          qRecord.subscribe(clientObject.queueCB);
+          qRecord.subscribe(clientObject.queueCB, true);
         }
       });
 
@@ -292,7 +296,7 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
           };
 
           // Re-add the callback and trigger it.
-          aRecord.subscribe(this.autoplayCB);
+          aRecord.subscribe(this.autoplayCB, true);
         }
       });
     }
@@ -316,7 +320,7 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
         };
 
         // Re-add the callback and trigger it.
-        gRecord.subscribe(clientObject.suggestionCB);
+        gRecord.subscribe(clientObject.suggestionCB, true);
       }
     });
 
@@ -501,7 +505,7 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
     // Make the RPC call to [re]initialize a stream and create CBS.
     clientObject.client.rpc.make(EDIT_STREAM_SETTINGS, streamCall,
       (error, data) => {
-      if (error) callback(Errors.stream, null);
+      if (error) callback(Errors.server, null);
       else {
         // Start stream keep-alive ping.
         if (!clientObject.hostingStream && settings.live === true) {
@@ -563,7 +567,7 @@ SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
     // Register with the stream and register any callbacks passed to join.
     clientObject.client.rpc.make(REGISTER_WITH_STREAM, registerCall,
       (error, data) => {
-      if (error) callback(Errors.permission, null);
+      if (error) callback(Errors.server, null);
       else {
         clientObject.joinedStream = stream;
         // Called on disconnect or loss of permissions.
@@ -662,8 +666,123 @@ SlideClient.prototype.createTrack = function(URI, trackData, callback) {
     // The RPC call will return the newly-created locator.
     clientObject.client.rpc.make(CREATE_LIST_TRACK, trackCall,
       (error, data) => {
-      if (error) callback(Errors.permission, null);
+      if (error) callback(Errors.server, null);
       else callback(null, data);
+    });
+  }
+};
+
+/**
+ * Edit a list for the current stream. Will fail if a racing
+ * update beats the given update.
+ *
+ * @param {string} list - A valid list type.
+ * @param {Array} snapshot - The list state prior to the edit.
+ * @param {Array} edited - The list state after the edit.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.editStreamList = function(list, snapshot, edited,
+  callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot edit if not part of a stream.
+  else if (clientObject.hostingStream === false &&
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Should we explicitly make
+  // sure that permissions are fine?
+  else {
+    const editCall = {
+      username: clientObject.username,
+      stream: clientObject.hostingStream === true
+        ? clientObject.username : clientObject.joinedStream,
+      list: list, original: snapshot, update: edited
+    };
+
+    // The RPC call will return null on success.
+    clientObject.client.rpc.make(MODIFY_STREAM_LISTS, editCall,
+      (error, data) => {
+      if (error) callback(Errors.server, null);
+      else callback(null, null);
+    });
+  }
+};
+
+/**
+ * Upvotes or downvotes a given track.
+ *
+ * @param {string} locator - A track locator with the track prefix.
+ * @param {boolean} up - True if upvote and false otherwise.
+ * @param {string} list - A valid list type.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.voteOnTrack = function(locator, up, list, callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot vote if not part of a stream.
+  else if (clientObject.hostingStream === false &&
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Should we explicitly make
+  // sure that permissions are fine?
+  else {
+    const voteCall = {
+      username: clientObject.username,
+      locator: locator,
+      list: list,
+      up: up
+    };
+
+    // The RPC call will return null on success.
+    clientObject.client.rpc.make(VOTE_ON_TRACK, voteCall,
+      (error, data) => {
+      if (error) callback(Errors.server, null);
+      else callback(null, null);
+    });
+  }
+};
+
+/**
+ * Plays a track on the stream.
+ *
+ * @param {string} URI - A valid Spotify track URI.
+ * @param {Object} playData - Spotify track data.
+ * @param {integer} offset - An offset in seconds from the track start.
+ * @param {string} state - Set to either playing or paused.
+ * @param {requestCallback} callback - Node-style callback for result.
+ */
+SlideClient.prototype.playTrack = function(URI, playData, offset, state,
+  callback) {
+  if (callback === undefined) callback = (error, data) => null;
+  const clientObject = this;
+  // Explicitly enforced to avoid bugs.
+  if (clientObject.authenticated === false)
+    callback(Errors.auth, null);
+  // Cannot play if not part of a stream.
+  else if (clientObject.hostingStream === false &&
+    clientObject.joinedStream === null)
+    callback(Errors.dead, null);
+  // TODO: Should we explicitly make
+  // sure that permissions are fine?
+  else {
+    const playCall = {
+      username: clientObject.username,
+      stream: clientObject.hostingStream === true
+        ? clientObject.username : clientObject.joinedStream,
+      state: state, seek: offset, URI: URI, playData: playData
+    };
+
+    // The RPC call will return null on success.
+    clientObject.client.rpc.make(PLAY_TRACK, playCall,
+      (error, data) => {
+      if (error) callback(Errors.server, null);
+      else callback(null, null);
     });
   }
 };
