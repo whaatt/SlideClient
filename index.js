@@ -68,7 +68,7 @@ const Errors = {
 const Deepstream = require('deepstream.io-client-js');
 
 // Used to export promise-compatibility.
-const Promise = require('bluebird');
+var PromisifyAll = require('es6-promisify-all');
 
 /**
  * Constructor for SlideClient. Takes in a
@@ -788,5 +788,5 @@ SlideClient.prototype.playTrack = function(URI, playData, offset, state,
 };
 
 // Export the class (in both NodeBack and Promises).
-Promise.promisifyAll(SlideClient.prototype);
+PromisifyAll(SlideClient.prototype);
 module.exports = SlideClient;

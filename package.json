@@ -17,8 +17,8 @@
   "license": "ISC",
   "homepage": "https://github.com/whaatt/SlideClient",
   "dependencies": {
-    "bluebird": "^3.5.0",
-    "deepstream.io-client-js": "^2.1.5"
+    "deepstream.io-client-js": "^2.1.5",
+    "es6-promisify-all": "^0.1.0"
   },
   "devDependencies": {
     "jsdoc": "^3.4.3",
