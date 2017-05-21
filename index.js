@@ -85,6 +85,7 @@ function SlideClient(serverURI, disconnectCB) {
   clientObject.authenticated = false;
   clientObject.hostingStream = false;
   clientObject.joinedStream = null;
+  clientObject.enteredStream = false;
   clientObject.streamPing = null;
   clientObject.streamDeadCB = null;
   clientObject.disconnectCB = disconnectCB;
@@ -99,6 +100,7 @@ function SlideClient(serverURI, disconnectCB) {
         clientObject.authenticated = false;
         clientObject.hostingStream = false;
         clientObject.joinedStream = null;
+        clientObject.enteredStream = false;
         clientObject.streamPing = null;
         clientObject.streamDeadCB = null;
         clientObject.username = null;
@@ -117,6 +119,7 @@ function SlideClient(serverURI, disconnectCB) {
       }
     });
 
+    // Fire the close call.
     clientObject.client.close();
   };
 
@@ -125,13 +128,13 @@ function SlideClient(serverURI, disconnectCB) {
     // Connection error case.
     if (event === 'connectionError')
       clientObject.reset((error, data) => null);
-  // Handle messages being denied on current stream [UNCLEAR IF WORKS].
+    // Handle messages being denied on current stream [UNCLEAR IF WORKS].
     else if (error === Deepstream.CONSTANTS.EVENT.MESSAGE_DENIED &&
       clientObject.joinedStream !== null && topic === 'R' &&
       event === STREAM_PREFIX + clientObject.joinedStream) {
-      // Leave the stream (no permissions)
-      // and implicitly fire the dead CB.
-      clientObject.leave((error, data) => true);
+      // Leave the stream (no adequate permissions)
+      // and implicitly fire the dead CB (first param).
+      clientObject.leave(true, (error, data) => true);
     } else {
       // Print any unhandled error.
       console.log('Unhandled Error!');
@@ -148,7 +151,7 @@ function SlideClient(serverURI, disconnectCB) {
   clientObject.autoplayCB = null;
   clientObject.suggestionCB = null;
   clientObject.trackCBS = {};
-}
+};
 
 /**
  * Gets the current state of the SlideClient.
@@ -172,9 +175,8 @@ SlideClient.prototype.getState = function(callback) {
 };
 
 /**
- * Sets view callbacks on the data of a stream.
+ * Sets view callbacks on stream data.
  *
- * @param {string} stream - The stream in question.
  * @param {Object} dataCallbacks - A map from properties to callbacks.
  * @param {Function} dataCallbacks.streamData - A callback for new stream data.
  * @param {Function} dataCallbacks.locked - A callback for locked list data.
@@ -183,21 +185,19 @@ SlideClient.prototype.getState = function(callback) {
  * @param {Function} dataCallbacks.suggestion - A callback for suggestion list data.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
-  callback) {
+SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
   // In this and all subsequent functions, we use this as a fallback.
   if (callback === undefined) callback = (error, data) => null;
   let clientObject = this;
 
-  // Auto-determine stream.
+  // Auto-determine the currently playing stream.
+  let stream = clientObject.hostingStream ? clientObject.username
+                                          : clientObject.joinedStream;
+
+  // No running stream.
   if (stream === null) {
-    stream = clientObject.hostingStream ? clientObject.username
-                                        : clientObject.joinedStream;
-    // No running stream.
-    if (stream === null) {
-      callback(Errors.dead, null);
-      return;
-    }
+    callback(Errors.dead, null);
+    return;
   }
 
   // Locator names for convenience.
@@ -224,9 +224,16 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
       clientObject.streamDataCB = (data) => {
         // Unfortunately read permissions in Deepstream are not dynamic.
         if (data.users.indexOf(clientObject.username + ',') === -1) {
-          // Leave the stream and implicitly fire the dead CB.
-          clientObject.leave((error, data) => true);
-          return;
+          if (clientObject.enteredStream === true) {
+            // Leave the stream and implicitly fire the dead CB.
+            clientObject.leave(true, (error, data) => true);
+            return;
+          }
+        } else {
+          // We use this boolean to make sure the
+          // dead CB is not fired before the user
+          // was actually added to the stream.
+          clientObject.enteredStream = true;
         }
 
         // TODO: Anything more to add?
@@ -339,10 +346,12 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
 /**
  * Sets view callbacks on stream track data.
  *
- * @param {Object} trackCBS - A map from track locators to callbacks.
+ * @param {Object} addTrackCBS - A map from track locators to callbacks to add.
+ * @param {Object} removeTrackCBS - An array of locators to remove callbacks for.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.setTrackCallbacks = function(trackCBS, callback) {
+SlideClient.prototype.setTrackCallbacks = function(addTrackCBS,
+  removeTrackCBS, callback) {
   if (callback === undefined) callback = (error, data) => null;
   const clientObject = this;
   // Explicitly enforced to avoid bugs.
@@ -356,26 +365,28 @@ SlideClient.prototype.setTrackCallbacks = function(trackCBS, callback) {
   // are about to set invalid callbacks that
   // never actually get set due to MESSAGE_DENIED.
   else {
-    // Unsubscribe from tracks in the current
-    // list of callbacks but not in the new one.
-    for (let locator in clientObject.trackCBS) {
-      if (locator in trackCBS) continue;
+    // Unsubscribe from tracks in the remove list.
+    for (let i = 0; i < removeTrackCBS.length; i++) {
+      let locator = removeTrackCBS[i];
+      // Make sure locator is still around for sanity.
+      if (!(locator in clientObject.trackCBS)) continue;
+
       const track = clientObject.client.record.getRecord(locator);
+      // The callback will remain inactive in trackCBS[locator].
       track.whenReady((tRecord) =>
         tRecord.unsubscribe(clientObject.trackCBS[locator]));
     }
 
-    // Subscribe to the tracks not in the current
-    // list of callbacks but in the new one.
-    for (let locator in trackCBS) {
-      if (locator in clientObject.trackCBS) continue;
+    // Subscribe to tracks in the add list.
+    for (let locator in addTrackCBS) {
       const track = clientObject.client.record.getRecord(locator);
+      clientObject.trackCBS[locator] = addTrackCBS[locator]
       track.whenReady((tRecord) =>
-        tRecord.subscribe(trackCBS[locator], true));
+        tRecord.subscribe(addTrackCBS[locator], true));
     }
 
-    // Assign the new list of callbacks.
-    clientObject.trackCBS = trackCBS;
+    // Assigns happen in background. TODO:
+    // Maybe Promisify this function later?
     callback(null, null);
   }
 };
@@ -452,7 +463,7 @@ SlideClient.prototype.logout = function(callback) {
   // stream or stop hosting the stream.
   new Promise((resolve, reject) => {
     if (clientObject.joinedStream !== null)
-      clientObject.leave((error, data) => resolve(data))
+      clientObject.leave(false, (error, data) => resolve(data))
     else if (clientObject.hostingStream === true)
       clientObject.stream({ live: false }, {},
         (error, data) => resolve(data));
@@ -531,7 +542,7 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
         }
 
         // Instantiate the new callbacks passed to stream.
-        clientObject.setStreamCallbacks(null, dataCallbacks, (error, data) => {
+        clientObject.setStreamCallbacks(dataCallbacks, (error, data) => {
           // Disable streaming. This call must come after
           // we set the callbacks, since unsetting the
           // callbacks depends on having a live stream.
@@ -599,12 +610,12 @@ SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
             // time, call leave on the stream and fire the dead CB.
             if (now - sRecord.get('timestamp') > INACTIVITY_THRESHOLD ||
               sRecord.get('live') === false) // Explicitly dead stream.
-              clientObject.leave((error, data) => true);
+              clientObject.leave(true, (error, data) => true);
           });
         }, KEEP_ALIVE_INTERVAL);
 
         // Register any callbacks passed to join using setStreamCallbacks().
-        clientObject.setStreamCallbacks(null, dataCallbacks, (error, data) => {
+        clientObject.setStreamCallbacks(dataCallbacks, (error, data) => {
           if (error) callback(Errors.callbacks, null);
           else callback(null, null);
         });
@@ -616,9 +627,10 @@ SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
 /**
  * Leaves a stream and uninstantiates relevant data callbacks.
  *
+ * @param {boolean} fireDead - Whether to fire the dead callback.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.leave = function(callback) {
+SlideClient.prototype.leave = function(fireDead, callback) {
   if (callback === undefined) callback = (error, data) => null;
   const clientObject = this;
   // You can only leave a stream if you belong to one.
@@ -630,18 +642,19 @@ SlideClient.prototype.leave = function(callback) {
       stream: clientObject.joinedStream
     };
 
-    // Remove callbacks and then deregister. TODO: Keep an eye
-    // on this function, and see if the potential race happens.
-    clientObject.setStreamCallbacks(null, {}, (error, data) => {
-      clientObject.setTrackCallbacks({}, (error, data) => {
+    let CBLocators = Object.keys(clientObject.trackCBS);
+    // Remove callbacks and then deregister client from stream.
+    clientObject.setStreamCallbacks({}, (error, data) => {
+      clientObject.setTrackCallbacks({}, CBLocators, (error, data) => {
         clearInterval(clientObject.streamPing); // Stop the ping.
         clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
           (error, data) => {
           if (error) callback(Errors.unknown, null);
           else {
-            clientObject.streamDeadCB();
+            if (fireDead) clientObject.streamDeadCB();
             clientObject.joinedStream = null;
             clientObject.streamDeadCB = null;
+            clientObject.enteredStream = false;
             callback(null, null);
           }
         });
