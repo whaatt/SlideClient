@@ -92,8 +92,6 @@ function SlideClient(serverURI, disconnectCB) {
 
   // Closes connection and resets client.
   clientObject.reset = function(callback) {
-    clientObject.client.close();
-
     // Wait for the closed connection to register.
     clientObject.client.on('connectionStateChanged', state => {
       if (state === Deepstream.CONSTANTS.CONNECTION_STATE.CLOSED) {
@@ -118,6 +116,8 @@ function SlideClient(serverURI, disconnectCB) {
         callback(null, null);
       }
     });
+
+    clientObject.client.close();
   };
 
   // Generic Deepstream error handler (private).
