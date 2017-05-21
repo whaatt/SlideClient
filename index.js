@@ -125,7 +125,7 @@ function SlideClient(serverURI, disconnectCB) {
     // Connection error case.
     if (event === 'connectionError')
       clientObject.reset((error, data) => null);
-    // Handle messages being denied on current stream.
+  // Handle messages being denied on current stream [UNCLEAR IF WORKS].
     else if (error === Deepstream.CONSTANTS.EVENT.MESSAGE_DENIED &&
       clientObject.joinedStream !== null && topic === 'R' &&
       event === STREAM_PREFIX + clientObject.joinedStream) {
@@ -181,10 +181,11 @@ SlideClient.prototype.getState = function(callback) {
  * @param {Function} dataCallbacks.queue - A callback for queue list data.
  * @param {Function} dataCallbacks.autoplay - A callback for autoplay list data.
  * @param {Function} dataCallbacks.suggestion - A callback for suggestion list data.
+ * @param {boolean} leaving - Indicates whether the setStreamCallbacks is on leave.
  * @param {requestCallback} callback - Node-style callback for result.
  */
 SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
-  callback) {
+  leaving, callback) {
   // In this and all subsequent functions, we use this as a fallback.
   if (callback === undefined) callback = (error, data) => null;
   let clientObject = this;
@@ -222,7 +223,15 @@ SlideClient.prototype.setStreamCallbacks = function(stream, dataCallbacks,
     // Install the new one if we can.
     if (dataCallbacks.streamData) {
       clientObject.streamDataCB = (data) => {
-        // TODO: More stuff goes here.
+        // Unfortunately read permissions in Deepstream are not dynamic.
+        if (data.users.indexOf(clientObject.username + ',') === -1 &&
+          !leaving) {
+          // Leave the stream and implicitly fire the dead CB.
+          clientObject.leave((error, data) => true);
+          return;
+        }
+
+        // TODO: Anything more to add?
         dataCallbacks.streamData(data);
       };
 
@@ -524,7 +533,8 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
         }
 
         // Instantiate the new callbacks passed to stream.
-        clientObject.setStreamCallbacks(null, dataCallbacks, (error, data) => {
+        clientObject.setStreamCallbacks(null, dataCallbacks, false,
+          (error, data) => {
           // Disable streaming. This call must come after
           // we set the callbacks, since unsetting the
           // callbacks depends on having a live stream.
@@ -597,7 +607,8 @@ SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
         }, KEEP_ALIVE_INTERVAL);
 
         // Register any callbacks passed to join using setStreamCallbacks().
-        clientObject.setStreamCallbacks(null, dataCallbacks, (error, data) => {
+        clientObject.setStreamCallbacks(null, dataCallbacks, false,
+          (error, data) => {
           if (error) callback(Errors.callbacks, null);
           else callback(null, null);
         });
@@ -625,7 +636,7 @@ SlideClient.prototype.leave = function(callback) {
 
     // Remove callbacks and then deregister. TODO: Keep an eye
     // on this function, and see if the potential race happens.
-    clientObject.setStreamCallbacks(null, {}, (error, data) => {
+    clientObject.setStreamCallbacks(null, {}, true, (error, data) => {
       clientObject.setTrackCallbacks({}, (error, data) => {
         clearInterval(clientObject.streamPing); // Stop the ping.
         clientObject.client.rpc.make(DEREGISTER_FROM_STREAM, deregisterCall,
