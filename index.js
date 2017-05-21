@@ -404,7 +404,14 @@ SlideClient.prototype.login = function(username, UUID, callback) {
   // Called if login times out.
   const loginTimeout = () => {
     clearTimeout(timeoutTimer);
-    callback(Errors.login, null);
+    // Double-check that we did not authenticate. Sometimes
+    // the login event fires before we are able to really
+    // create the login handler and login timeout callbacks.
+    const state = clientObject.client.getConnectionState()
+    if (state === Deepstream.CONSTANTS.CONNECTION_STATE.OPEN) {
+      clientObject.authenticated = true;
+      callback(null, null);
+    } else callback(Errors.login, null);
   };
 
   // Instantiate the quarantined connection to Deepstream.
