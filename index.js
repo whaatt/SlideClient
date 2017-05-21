@@ -516,15 +516,17 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
           KEEP_ALIVE_INTERVAL);
         }
 
-        // Disable streaming.
-        else if (settings.live === false) {
-          clientObject.hostingStream = false;
-          clearInterval(clientObject.streamPing);
-          clientObject.streamPing = null;
-        }
-
         // Instantiate the new callbacks passed to stream.
         clientObject.setStreamCallbacks(null, dataCallbacks, (error, data) => {
+          // Disable streaming. This call must come after
+          // we set the callbacks, since unsetting the
+          // callbacks depends on having a live stream.
+          if (settings.live === false) {
+            clientObject.hostingStream = false;
+            clearInterval(clientObject.streamPing);
+            clientObject.streamPing = null;
+          }
+
           if (error) callback(Errors.callbacks, null);
           else callback(null, null);
         });
