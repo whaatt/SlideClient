@@ -90,7 +90,6 @@ function SlideClient(serverURI, disconnectCB, usePostMessage) {
   clientObject.enteredStream = false;
   clientObject.streamPing = null;
   clientObject.streamDeadCB = null;
-  clientObject.disconnectCB = disconnectCB;
   clientObject.usePostMessage = usePostMessage || false;
   clientObject.username = null;
 
@@ -99,6 +98,11 @@ function SlideClient(serverURI, disconnectCB, usePostMessage) {
     return (error, result) => window.webkit.messageHandlers[methodName]
       .postMessage({ error: error, result: result });
   };
+
+  // Convert string identifier to WebKit postMessage function.
+  if (disconnectCB !== undefined && clientObject.usePostMessage === true)
+    disconnectCB = clientObject.makePostMessageCB(disconnectCB);
+  clientObject.disconnectCB = disconnectCB;
 
   // Closes connection and resets client.
   clientObject.reset = function(callback) {
