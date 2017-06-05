@@ -95,8 +95,8 @@ function SlideClient(serverURI, disconnectCB, usePostMessage) {
 
   // Makes a postMessage-style callback for use in iOS.
   clientObject.makePostMessageCB = function(methodName) {
-    return (error, result) => window.webkit.messageHandlers[methodName]
-      .postMessage({ error: error, result: result });
+    return (error, data) => window.webkit.messageHandlers[methodName]
+      .postMessage({ error: error === null ? null : error.message, data: data });
   };
 
   // Convert string identifier to WebKit postMessage function.
