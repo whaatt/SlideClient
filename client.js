@@ -7880,36 +7880,35 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
       sRecord.discard();
     }
 
-    // Install the new one if we can.
-    if (dataCallbacks.streamData) {
-      // Convert string identifier to
-      // WebKit postMessage function.
-      if (clientObject.usePostMessage === true)
-        dataCallbacks.streamData = clientObject.makePostMessageDataCB(
-          dataCallbacks.streamData);
+    // Convert string identifier to WebKit postMessage function.
+    if (dataCallbacks.streamData && clientObject.usePostMessage === true)
+      dataCallbacks.streamData = clientObject.makePostMessageDataCB(
+        dataCallbacks.streamData);
 
-      clientObject.streamDataCB = (data) => {
-        // Unfortunately read permissions in Deepstream are not dynamic.
-        if (data.users.indexOf(clientObject.username) === -1) {
-          if (clientObject.enteredStream === true) {
-            // Leave the stream and implicitly fire the dead CB.
-            clientObject.leave(true, (error, data) => true);
-            return;
-          }
-        } else {
-          // We use this boolean to make sure the
-          // dead CB is not fired before the user
-          // was actually added to the stream.
-          clientObject.enteredStream = true;
+    // We always add a stream data CB
+    // since we have to do some tracking.
+    clientObject.streamDataCB = (data) => {
+      // Unfortunately read permissions in Deepstream are not dynamic.
+      if (data.users.indexOf(clientObject.username) === -1) {
+        if (clientObject.enteredStream === true) {
+          // Leave the stream and implicitly fire the dead CB.
+          clientObject.leave(true, (error, data) => true);
+          return;
         }
+      } else {
+        // We use this boolean to make sure the
+        // dead CB is not fired before the user
+        // was actually added to the stream.
+        clientObject.enteredStream = true;
+      }
 
-        // TODO: Anything more to add?
+      // Client can do additional stuff.
+      if (dataCallbacks.streamData)
         dataCallbacks.streamData(data);
-      };
+    };
 
-      // Re-add the callback and trigger it.
-      sRecord.subscribe(clientObject.streamDataCB, true);
-    }
+    // Re-add the callback and trigger it.
+    sRecord.subscribe(clientObject.streamDataCB, true);
 
     // Queue, locked, and autoplay are only
     // visible if the stream is not limited.
