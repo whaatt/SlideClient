@@ -237,7 +237,7 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
 
       clientObject.streamDataCB = (data) => {
         // Unfortunately read permissions in Deepstream are not dynamic.
-        if (data.users.indexOf(clientObject.username + ',') === -1) {
+        if (data.users.indexOf(clientObject.username) === -1) {
           if (clientObject.enteredStream === true) {
             // Leave the stream and implicitly fire the dead CB.
             clientObject.leave(true, (error, data) => true);
