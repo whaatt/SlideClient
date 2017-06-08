@@ -99,6 +99,18 @@ function SlideClient(serverURI, disconnectCB, usePostMessage) {
       .postMessage({ error: error === null ? null : error.message, data: data });
   };
 
+  // Makes a postMessage-style data callback for use in iOS.
+  clientObject.makePostMessageDataCB = function(methodName) {
+    return (data) => window.webkit.messageHandlers[methodName]
+      .postMessage({ error: null, data: data });
+  };
+
+  // Makes a postMessage-style track data callback for use in iOS [client].
+  clientObject.makePostMessageTrackDataCB = function(methodName, locator) {
+    return (data) => window.webkit.messageHandlers[methodName]
+      .postMessage({ error: null, locator: locator, data: data });
+  };
+
   // Convert string identifier to WebKit postMessage function.
   if (disconnectCB !== undefined && clientObject.usePostMessage === true)
     disconnectCB = clientObject.makePostMessageCB(disconnectCB);
@@ -167,31 +179,6 @@ function SlideClient(serverURI, disconnectCB, usePostMessage) {
 };
 
 /**
- * Gets the current state of the SlideClient.
- *
- * @param {requestCallback} callback - Node-style callback for result.
- * @returns {Object} Contains authentication data and stream status.
- */
-SlideClient.prototype.getState = function(callback) {
-  let clientObject = this;
-  const state = {
-    username: clientObject.username,
-    authenticated: clientObject.authenticated,
-    hostingStream: clientObject.hostingStream,
-    joinedStream: clientObject.joinedStream
-  };
-
-  // Convert string identifier to WebKit postMessage function.
-  if (callback !== undefined && clientObject.usePostMessage === true)
-    callback = clientObject.makePostMessageCB(callback);
-
-  // Compatibility with Promises.
-  if (callback !== undefined)
-    callback(null, state);
-  else return state;
-};
-
-/**
  * Sets view callbacks on stream data.
  *
  * @param {Object} dataCallbacks - A map from properties to callbacks.
@@ -245,8 +232,8 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
       // Convert string identifier to
       // WebKit postMessage function.
       if (clientObject.usePostMessage === true)
-        dataCallbacks.streamData = clientObject.makePostMessageCB(dataCallbacks
-          .streamData);
+        dataCallbacks.streamData = clientObject.makePostMessageDataCB(
+          dataCallbacks.streamData);
 
       clientObject.streamDataCB = (data) => {
         // Unfortunately read permissions in Deepstream are not dynamic.
@@ -289,8 +276,8 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
           // Convert string identifier to
           // WebKit postMessage function.
           if (clientObject.usePostMessage === true)
-            dataCallbacks.locked = clientObject.makePostMessageCB(dataCallbacks
-              .locked);
+            dataCallbacks.locked = clientObject.makePostMessageDataCB(
+              dataCallbacks.locked);
 
           clientObject.lockedCB = (data) => {
             // TODO: More stuff goes here.
@@ -317,8 +304,8 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
           // Convert string identifier to
           // WebKit postMessage function.
           if (clientObject.usePostMessage === true)
-            dataCallbacks.queue = clientObject.makePostMessageCB(dataCallbacks
-              .queue);
+            dataCallbacks.queue = clientObject.makePostMessageDataCB(
+              dataCallbacks.queue);
 
           clientObject.queueCB = (data) => {
             // TODO: More stuff goes here.
@@ -347,7 +334,7 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
           // WebKit postMessage function.
           if (clientObject.usePostMessage === true)
             dataCallbacks.autoplay = clientObject
-              .makePostMessageCB(dataCallbacks.autoplay);
+              .makePostMessageDataCB(dataCallbacks.autoplay);
 
           clientObject.autoplayCB = (data) => {
             // TODO: More stuff goes here.
@@ -377,7 +364,7 @@ SlideClient.prototype.setStreamCallbacks = function(dataCallbacks, callback) {
         // WebKit postMessage function.
         if (clientObject.usePostMessage === true)
           dataCallbacks.suggestion = clientObject
-            .makePostMessageCB(dataCallbacks.suggestion);
+            .makePostMessageDataCB(dataCallbacks.suggestion);
 
         clientObject.suggestionCB = (data) => {
           // TODO: More stuff goes here.
@@ -438,8 +425,8 @@ SlideClient.prototype.setTrackCallbacks = function(addTrackCBS,
       const track = clientObject.client.record.getRecord(locator);
       // Convert string identifier to WebKit postMessage function.
       if (clientObject.usePostMessage === true)
-        addTrackCBS[locator] = clientObject
-          .makePostMessageCB(addTrackCBS[locator]);
+        addTrackCBS[locator] = clientObject // IOS track CB has locator param.
+          .makePostMessageTrackDataCB(addTrackCBS[locator], locator);
 
       clientObject.trackCBS[locator] = addTrackCBS[locator];
       track.whenReady((tRecord) =>
@@ -665,7 +652,7 @@ SlideClient.prototype.join = function(stream, dataCallbacks, streamDeadCB,
 
   // Convert string identifier to WebKit postMessage function.
   if (streamDeadCB !== undefined && clientObject.usePostMessage === true)
-    streamDeadCB = clientObject.makePostMessageCB(streamDeadCB);
+    streamDeadCB = clientObject.makePostMessageDataCB(streamDeadCB);
 
   // Explicitly enforced to avoid bugs.
   if (clientObject.authenticated === false)
@@ -745,7 +732,8 @@ SlideClient.prototype.leave = function(fireDead, callback) {
           (error, data) => {
           if (error) callback(Errors.unknown, null);
           else {
-            if (fireDead) clientObject.streamDeadCB();
+            // Client will set fireDead if they have cleanup to do.
+            if (fireDead) clientObject.streamDeadCB(null);
             clientObject.joinedStream = null;
             clientObject.streamDeadCB = null;
             clientObject.enteredStream = false;
