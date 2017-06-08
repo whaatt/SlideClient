@@ -749,12 +749,11 @@ SlideClient.prototype.leave = function(fireDead, callback) {
  * Creates a track on the server and returns the record locator
  * for the given track.
  *
- * @param {string} URI - Spotify URI for the track.
- * @param {Object} trackData - Spotify track data for the track.
+ * @param {Object} trackData - Platform track data for the track.
  * @param {requestCallback} callback - Node-style callback for result.
  * @returns {string} A newly-created track locator.
  */
-SlideClient.prototype.createTrack = function(URI, trackData, callback) {
+SlideClient.prototype.createTrack = function(trackData, callback) {
   if (callback === undefined) callback = (error, data) => null;
   const clientObject = this;
 
@@ -773,10 +772,9 @@ SlideClient.prototype.createTrack = function(URI, trackData, callback) {
   // sure that permissions are fine?
   else {
     const trackCall = {
-      username: clientObject.username,
-      URI: URI, playData: trackData,
       stream: clientObject.hostingStream === true
-        ? clientObject.username : clientObject.joinedStream
+        ? clientObject.username : clientObject.joinedStream,
+      username: clientObject.username, trackData: trackData
     };
 
     // The RPC call will return the newly-created locator.
@@ -877,13 +875,12 @@ SlideClient.prototype.voteOnTrack = function(locator, up, list, callback) {
 /**
  * Plays a track on the stream.
  *
- * @param {string} URI - A valid Spotify track URI.
- * @param {Object} playData - Spotify track data.
+ * @param {Object} trackData - Platform track data.
  * @param {integer} offset - An offset in seconds from the track start.
  * @param {string} state - Set to either playing or paused.
  * @param {requestCallback} callback - Node-style callback for result.
  */
-SlideClient.prototype.playTrack = function(URI, playData, offset, state,
+SlideClient.prototype.playTrack = function(trackData, offset, state,
   callback) {
   if (callback === undefined) callback = (error, data) => null;
   const clientObject = this;
@@ -906,7 +903,7 @@ SlideClient.prototype.playTrack = function(URI, playData, offset, state,
       username: clientObject.username,
       stream: clientObject.hostingStream === true
         ? clientObject.username : clientObject.joinedStream,
-      state: state, seek: offset, URI: URI, playData: playData
+      state: state, seek: offset, trackData: trackData
     };
 
     // The RPC call will return null on success.
