@@ -546,6 +546,7 @@ SlideClient.prototype.logout = function(callback) {
  * called login() first, or this function will fail.
  *
  * @param {Object} settings - Stream settings object (see below for props).
+ * @param {string} settings.display - Sets a display name for the current stream.
  * @param {string} settings.live - Toggles whether the stream is running.
  * @param {string} settings.privateMode - Sets stream visibility to private.
  * @param {string} settings.voting - Sets voting on or off for the stream.
@@ -582,6 +583,8 @@ SlideClient.prototype.stream = function(settings, dataCallbacks, callback) {
     const streamCall = {
       username: clientObject.username,
       stream: clientObject.username,
+      display: settings.display !== undefined
+        ? settings.display : clientObject.username,
       live: settings.live !== undefined
         ? settings.live : true,
       private: settings.privateMode !== undefined
